@@ -130,7 +130,8 @@ namespace argos {
                          const TConfiguration& t_configuration,
                          TConfigurationNode& t_interface,
                          const std::string& str_save_path):
-      SInterface(str_label, t_configuration),
+      SInterface(str_label),
+      m_tConfiguration(t_configuration),
       m_fTagSideLength(0.0235f),
       m_strSavePath(str_save_path),
       m_cMetadata("camera") {
@@ -145,6 +146,8 @@ namespace argos {
       CVector2 cPrincipalPoint = CVector2(CAMERA_FOCAL_LENGTH_X, CAMERA_FOCAL_LENGTH_Y);
       CVector3 cDistortionK = CVector3(0,0,0);
       CVector2 cDistortionP = CVector2(0,0);
+      CVector3 cCameraPosition = std::get<CVector3>(m_tConfiguration);
+      CQuaternion cCameraOrientation = std::get<CQuaternion>(m_tConfiguration);
       GetNodeAttributeOrDefault(t_interface, "calibration", strCalibrationFilePath, strCalibrationFilePath);
       if(strCalibrationFilePath.empty()) {
          LOGERR << "[WARNING] No calibration data provided for the drone camera system" << std::endl;
@@ -159,6 +162,8 @@ namespace argos {
          GetNodeAttributeOrDefault(tSensorNode, "principal_point", cPrincipalPoint, cPrincipalPoint);
          GetNodeAttributeOrDefault(tSensorNode, "distortion_k", cDistortionK, cDistortionK);
          GetNodeAttributeOrDefault(tSensorNode, "distortion_p", cDistortionP, cDistortionP);
+         GetNodeAttributeOrDefault(tSensorNode, "position", cCameraPosition, cCameraPosition);
+         GetNodeAttributeOrDefault(tSensorNode, "orientation", cCameraOrientation, cCameraOrientation);
       }
       CSquareMatrix<3>& cCameraMatrix = m_sCalibration.CameraMatrix;
       cCameraMatrix.SetIdentityMatrix();
@@ -168,6 +173,8 @@ namespace argos {
       cCameraMatrix(1,2) = cPrincipalPoint.GetY();
       m_sCalibration.DistortionK = cDistortionK;
       m_sCalibration.DistortionP = cDistortionP;
+      std::get<CVector3>(m_tConfiguration) = cCameraPosition;
+      std::get<CQuaternion>(m_tConfiguration) = cCameraOrientation;
       /* initialize the apriltag components */
       GetNodeAttributeOrDefault(t_interface, "tag_family", m_strTagFamilyName, m_strTagFamilyName);
       if (m_strTagFamilyName == "tag16h5")

@@ -76,7 +76,13 @@ namespace argos {
             return m_cMetadata;
          }
 
+         const TConfiguration& GetSensorConfiguration() const {
+            return m_tConfiguration;
+         };
+
       private:
+         /* camera position and orientation */
+         TConfiguration m_tConfiguration;
          /* calibration data */
          struct SCalibration {
             CVector3 PositionError;
