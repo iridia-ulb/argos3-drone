@@ -82,7 +82,10 @@ namespace argos {
             CVector3 PositionError;
             CQuaternion OrientationError;
             CSquareMatrix<3> CameraMatrix;
+            CVector3 DistortionK;
+            CVector2 DistortionP;
          } m_sCalibration;
+         void UndistortPixel(double& fU, double& fV);
          /* sensor configuration */
          std::array<UInt32, 2> m_arrCaptureResolution;
          std::array<UInt32, 2> m_arrProcessingResolution;

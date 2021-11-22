@@ -34,6 +34,8 @@
 #include <algorithm>
 #include <execution>
 
+#define UNDISTORT_ITERATIONS 10
+
 /* hint: the command "v4l2-ctl -d0 --list-formats-ext" lists formats for /dev/video0 */
 /* for testing with a set of images: https://raffaels-blog.de/en/post/fake-webcam/ */
 
@@ -138,21 +140,25 @@ namespace argos {
       GetNodeAttributeOrDefault(t_interface, "camera_exposure_auto_mode", m_bCameraExposureAuto, m_bCameraExposureAuto);
       GetNodeAttributeOrDefault(t_interface, "camera_exposure_absolute_time", m_unCameraExposureAbsoluteTime, m_unCameraExposureAbsoluteTime);
       /* parse calibration data if provided */
-      CVector2 cFocalLength;
-      CVector2 cPrincipalPoint;
-      try {
-         TConfigurationNode& t_calibration = GetNode(t_interface, "calibration");
-         GetNodeAttribute(t_calibration, "focal_length", cFocalLength);
-         GetNodeAttribute(t_calibration, "principal_point", cPrincipalPoint);
-         GetNodeAttribute(t_calibration, "position_error", m_sCalibration.PositionError);
-         GetNodeAttribute(t_calibration, "orientation_error", m_sCalibration.OrientationError);
+      std::string strCalibrationFilePath;
+      CVector2 cFocalLength = CVector2(CAMERA_PRINCIPAL_POINT_X, CAMERA_PRINCIPAL_POINT_Y);
+      CVector2 cPrincipalPoint = CVector2(CAMERA_FOCAL_LENGTH_X, CAMERA_FOCAL_LENGTH_Y);
+      CVector3 cDistortionK = CVector3(0,0,0);
+      CVector2 cDistortionP = CVector2(0,0);
+      GetNodeAttributeOrDefault(t_interface, "calibration", strCalibrationFilePath, strCalibrationFilePath);
+      if(strCalibrationFilePath.empty()) {
+         LOGERR << "[WARNING] No calibration data provided for the drone camera system" << std::endl;
       }
-      catch(CARGoSException& ex) {
-         LOGERR << "[WARNING] Failed to parse calibration (using default calibration)." << std::endl;
-         cFocalLength.Set(CAMERA_PRINCIPAL_POINT_X, CAMERA_PRINCIPAL_POINT_Y);
-         cPrincipalPoint.Set(CAMERA_FOCAL_LENGTH_X, CAMERA_FOCAL_LENGTH_Y);
-         m_sCalibration.PositionError = CVector3();
-         m_sCalibration.OrientationError = CQuaternion();
+      else {
+         ticpp::Document tDocument = ticpp::Document(strCalibrationFilePath);
+         tDocument.LoadFile();
+         TConfigurationNode& tCalibrationNode = *tDocument.FirstChildElement();
+         TConfigurationNode& tSensorNode = GetNode(tCalibrationNode, "drone_camera");
+         /* read the parameters */
+         GetNodeAttributeOrDefault(tSensorNode, "focal_length", cFocalLength, cFocalLength);
+         GetNodeAttributeOrDefault(tSensorNode, "principal_point", cPrincipalPoint, cPrincipalPoint);
+         GetNodeAttributeOrDefault(tSensorNode, "distortion_k", cDistortionK, cDistortionK);
+         GetNodeAttributeOrDefault(tSensorNode, "distortion_p", cDistortionP, cDistortionP);
       }
       CSquareMatrix<3>& cCameraMatrix = m_sCalibration.CameraMatrix;
       cCameraMatrix.SetIdentityMatrix();
@@ -160,6 +166,8 @@ namespace argos {
       cCameraMatrix(1,1) = cFocalLength.GetY();
       cCameraMatrix(0,2) = cPrincipalPoint.GetX();
       cCameraMatrix(1,2) = cPrincipalPoint.GetY();
+      m_sCalibration.DistortionK = cDistortionK;
+      m_sCalibration.DistortionP = cDistortionP;
       /* initialize the apriltag components */
       GetNodeAttributeOrDefault(t_interface, "tag_family", m_strTagFamilyName, m_strTagFamilyName);
       if (m_strTagFamilyName == "tag16h5")
@@ -457,6 +465,12 @@ namespace argos {
             for(size_t un_index = 0; un_index < unTagCount; un_index++) {
                ::apriltag_detection_t *ptDetection;
                ::zarray_get(ptDetectionArray, un_index, &ptDetection);
+               /* undistort corner and center pixels */
+               UndistortPixel(ptDetection->p[0][0], ptDetection->p[0][1]);
+               UndistortPixel(ptDetection->p[1][0], ptDetection->p[1][1]);
+               UndistortPixel(ptDetection->p[2][0], ptDetection->p[2][1]);
+               UndistortPixel(ptDetection->p[3][0], ptDetection->p[3][1]);
+               UndistortPixel(ptDetection->c[0],    ptDetection->c[1]);
                /* copy the tag corner coordinates */
                arrCornerPixels[0].Set(ptDetection->p[0][0], ptDetection->p[0][1]);
                arrCornerPixels[1].Set(ptDetection->p[1][0], ptDetection->p[1][1]);
@@ -527,6 +541,53 @@ namespace argos {
    /****************************************/
    /****************************************/
    
+   void CDroneCamerasSystemDefaultSensor::SPhysicalInterface::UndistortPixel(double& fU, double& fV)
+   {
+      /* U,V are pixels in the image.
+         U+ to the right <--> x,
+         V+ down         <--> y  */
+      Real fx = m_sCalibration.CameraMatrix(0,0);
+      Real fy = m_sCalibration.CameraMatrix(1,1);
+      Real cx = m_sCalibration.CameraMatrix(0,2);
+      Real cy = m_sCalibration.CameraMatrix(1,2);
+      Real k1 = m_sCalibration.DistortionK.GetX();
+      Real k2 = m_sCalibration.DistortionK.GetY();
+      Real k3 = m_sCalibration.DistortionK.GetZ();
+      Real p1 = m_sCalibration.DistortionP.GetX();
+      Real p2 = m_sCalibration.DistortionP.GetY();
+
+      Real xDistortion = (fU - cx) / fx;
+      Real yDistortion = (fV - cy) / fy;
+
+      Real xCorrected, yCorrected;
+      Real x0 = xDistortion;
+      Real y0 = yDistortion;
+
+      /* start iteration */
+      for (UInt8 i = 0; i < UNDISTORT_ITERATIONS; i++)
+      {
+         Real r2 = xDistortion * xDistortion + yDistortion * yDistortion;
+         Real K = 1 / (1. + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2);
+
+         Real dx = 2. * p1 * xDistortion * yDistortion + p2 * (r2 + 2. * xDistortion * xDistortion);
+         Real dy = p1 * (r2 + 2. * yDistortion * yDistortion) + 2. * p2 * xDistortion * yDistortion;
+
+         xCorrected = (x0 - dx) * K;
+         yCorrected = (y0 - dy) * K;
+         xDistortion = xCorrected;
+         yDistortion = yCorrected;
+      }
+
+      xCorrected = xCorrected * fx + cx;
+      yCorrected = yCorrected * fy + cy;
+
+      fU = xCorrected;
+      fV = yCorrected;
+   }
+
+   /****************************************/
+   /****************************************/
+
    REGISTER_SENSOR(CDroneCamerasSystemDefaultSensor,
                    "drone_cameras_system", "default",
                    "Michael Allwright [allsey87@gmail.com]",
