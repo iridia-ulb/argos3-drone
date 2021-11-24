@@ -34,9 +34,6 @@
 #include <algorithm>
 #include <execution>
 
-#define DEFAULT_TAG_SIDE_LENGTH 0.0235f
-#define UNDISTORT_ITERATIONS 10
-
 /* hint: the command "v4l2-ctl -d0 --list-formats-ext" lists formats for /dev/video0 */
 /* for testing with a set of images: https://raffaels-blog.de/en/post/fake-webcam/ */
 
@@ -555,9 +552,7 @@ namespace argos {
       /* U,V are pixels in the image.
          U+ to the right <--> x,
          V+ down         <--> y  */
-
       /* This function operates on apriltag variables which are doubles rather than Reals */
-
       double fFx = m_sCalibration.CameraMatrix(0,0);
       double fFy = m_sCalibration.CameraMatrix(1,1);
       double fCx = m_sCalibration.CameraMatrix(0,2);
@@ -567,35 +562,35 @@ namespace argos {
       double fK3 = m_sCalibration.DistortionK.GetZ();
       double fP1 = m_sCalibration.DistortionP.GetX();
       double fP2 = m_sCalibration.DistortionP.GetY();
-
       double fXDistortion = (fU - fCx) / fFx;
       double fYDistortion = (fV - fCy) / fFy;
-
       double fXCorrected, fYCorrected;
       double fX0 = fXDistortion;
       double fY0 = fYDistortion;
-
       /* start iteration */
       for (UInt8 unI = 0; unI < UNDISTORT_ITERATIONS; unI++)
       {
-         double fR2 = fXDistortion * fXDistortion + fYDistortion * fYDistortion;
-         double fK = 1 / (1. + fK1 * fR2 + fK2 * fR2 * fR2 + fK3 * fR2 * fR2 * fR2);
-
-         double fDx = 2. * fP1 * fXDistortion * fYDistortion + fP2 * (fR2 + 2. * fXDistortion * fXDistortion);
-         double fDy = fP1 * (fR2 + 2. * fYDistortion * fYDistortion) + 2. * fP2 * fXDistortion * fYDistortion;
-
+         double fR2 = std::pow(fXDistortion, 2) + std::pow(fYDistortion, 2);
+         double fK = 1 / (1. + fK1 * fR2 + fK2 * std::pow(fR2, 2) + fK3 * std::pow(fR2, 3));
+         double fDx = 2. * fP1 * fXDistortion * fYDistortion + fP2 * (fR2 + 2. * std::pow(fXDistortion, 2));
+         double fDy = fP1 * (fR2 + 2. * std::pow(fYDistortion, 2)) + 2. * fP2 * fXDistortion * fYDistortion;
          fXCorrected = (fX0 - fDx) * fK;
          fYCorrected = (fY0 - fDy) * fK;
          fXDistortion = fXCorrected;
          fYDistortion = fYCorrected;
       }
-
       fXCorrected = fXCorrected * fFx + fCx;
       fYCorrected = fYCorrected * fFy + fCy;
-
       fU = fXCorrected;
       fV = fYCorrected;
    }
+
+
+   /****************************************/
+   /****************************************/
+
+   const UInt8 CDroneCamerasSystemDefaultSensor::UNDISTORT_ITERATIONS = 10;
+   const Real CDroneCamerasSystemDefaultSensor::DEFAULT_TAG_SIDE_LENGTH = 0.0235f;
 
    /****************************************/
    /****************************************/

@@ -134,6 +134,10 @@ namespace argos {
       /* path to save camera sensor data */
       std::string m_strSensorDataPath;
 
+   private:
+      static const UInt8 UNDISTORT_ITERATIONS;
+      static const Real DEFAULT_TAG_SIDE_LENGTH;
+
       /****************************************/
       /****************************************/
 
