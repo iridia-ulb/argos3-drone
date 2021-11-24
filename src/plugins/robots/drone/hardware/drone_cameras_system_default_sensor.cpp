@@ -553,43 +553,43 @@ namespace argos {
       /* U,V are pixels in the image.
          U+ to the right <--> x,
          V+ down         <--> y  */
-      Real fx = m_sCalibration.CameraMatrix(0,0);
-      Real fy = m_sCalibration.CameraMatrix(1,1);
-      Real cx = m_sCalibration.CameraMatrix(0,2);
-      Real cy = m_sCalibration.CameraMatrix(1,2);
-      Real k1 = m_sCalibration.DistortionK.GetX();
-      Real k2 = m_sCalibration.DistortionK.GetY();
-      Real k3 = m_sCalibration.DistortionK.GetZ();
-      Real p1 = m_sCalibration.DistortionP.GetX();
-      Real p2 = m_sCalibration.DistortionP.GetY();
+      Real fFx = m_sCalibration.CameraMatrix(0,0);
+      Real fFy = m_sCalibration.CameraMatrix(1,1);
+      Real fCx = m_sCalibration.CameraMatrix(0,2);
+      Real fCy = m_sCalibration.CameraMatrix(1,2);
+      Real fK1 = m_sCalibration.DistortionK.GetX();
+      Real fK2 = m_sCalibration.DistortionK.GetY();
+      Real fK3 = m_sCalibration.DistortionK.GetZ();
+      Real fP1 = m_sCalibration.DistortionP.GetX();
+      Real fP2 = m_sCalibration.DistortionP.GetY();
 
-      Real xDistortion = (fU - cx) / fx;
-      Real yDistortion = (fV - cy) / fy;
+      Real fXDistortion = (fU - fCx) / fFx;
+      Real fYDistortion = (fV - fCy) / fFy;
 
-      Real xCorrected, yCorrected;
-      Real x0 = xDistortion;
-      Real y0 = yDistortion;
+      Real fXCorrected, fYCorrected;
+      Real fX0 = fXDistortion;
+      Real fY0 = fYDistortion;
 
       /* start iteration */
-      for (UInt8 i = 0; i < UNDISTORT_ITERATIONS; i++)
+      for (UInt8 unI = 0; unI < UNDISTORT_ITERATIONS; unI++)
       {
-         Real r2 = xDistortion * xDistortion + yDistortion * yDistortion;
-         Real K = 1 / (1. + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2);
+         Real fR2 = fXDistortion * fXDistortion + fYDistortion * fYDistortion;
+         Real fK = 1 / (1. + fK1 * fR2 + fK2 * fR2 * fR2 + fK3 * fR2 * fR2 * fR2);
 
-         Real dx = 2. * p1 * xDistortion * yDistortion + p2 * (r2 + 2. * xDistortion * xDistortion);
-         Real dy = p1 * (r2 + 2. * yDistortion * yDistortion) + 2. * p2 * xDistortion * yDistortion;
+         Real fDx = 2. * fP1 * fXDistortion * fYDistortion + fP2 * (fR2 + 2. * fXDistortion * fXDistortion);
+         Real fDy = fP1 * (fR2 + 2. * fYDistortion * fYDistortion) + 2. * fP2 * fXDistortion * fYDistortion;
 
-         xCorrected = (x0 - dx) * K;
-         yCorrected = (y0 - dy) * K;
-         xDistortion = xCorrected;
-         yDistortion = yCorrected;
+         fXCorrected = (fX0 - fDx) * fK;
+         fYCorrected = (fY0 - fDy) * fK;
+         fXDistortion = fXCorrected;
+         fYDistortion = fYCorrected;
       }
 
-      xCorrected = xCorrected * fx + cx;
-      yCorrected = yCorrected * fy + cy;
+      fXCorrected = fXCorrected * fFx + fCx;
+      fYCorrected = fYCorrected * fFy + fCy;
 
-      fU = xCorrected;
-      fV = yCorrected;
+      fU = fXCorrected;
+      fV = fYCorrected;
    }
 
    /****************************************/
