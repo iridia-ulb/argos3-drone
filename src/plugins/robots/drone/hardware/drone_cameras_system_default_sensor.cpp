@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <execution>
 
+#define DEFAULT_TAG_SIDE_LENGTH 0.0235f
 #define UNDISTORT_ITERATIONS 10
 
 /* hint: the command "v4l2-ctl -d0 --list-formats-ext" lists formats for /dev/video0 */
@@ -46,7 +47,7 @@ namespace argos {
 
    void CDroneCamerasSystemDefaultSensor::Init(TConfigurationNode& t_tree) {
       /* expect four cameras */
-      m_vecPhysicalInterfaces.reserve(SENSOR_CONFIGURATION.size());
+      m_vecPhysicalInterfaces.reserve(DEFAULT_SENSOR_CONFIGURATION.size());
       try {
          CCI_DroneCamerasSystemSensor::Init(t_tree);
          TConfigurationNodeIterator itInterface("camera");
@@ -56,8 +57,8 @@ namespace argos {
             std::string strId;
             GetNodeAttribute(*itInterface, "id", strId);
             std::map<std::string, TConfiguration>::const_iterator itConfig =
-               SENSOR_CONFIGURATION.find(strId);
-            if(itConfig == std::end(SENSOR_CONFIGURATION)) {
+               DEFAULT_SENSOR_CONFIGURATION.find(strId);
+            if(itConfig == std::end(DEFAULT_SENSOR_CONFIGURATION)) {
                THROW_ARGOSEXCEPTION("No configuration found for interface with id \"" << strId << "\"")
             }
             else {
@@ -132,7 +133,7 @@ namespace argos {
                          const std::string& str_save_path):
       SInterface(str_label),
       m_tConfiguration(t_configuration),
-      m_fTagSideLength(0.0235f),
+      m_fTagSideLength(DEFAULT_TAG_SIDE_LENGTH),
       m_strSavePath(str_save_path),
       m_cMetadata("camera") {
       /* parse camera parameters */
@@ -142,8 +143,8 @@ namespace argos {
       GetNodeAttributeOrDefault(t_interface, "camera_exposure_absolute_time", m_unCameraExposureAbsoluteTime, m_unCameraExposureAbsoluteTime);
       /* parse calibration data if provided */
       std::string strCalibrationFilePath;
-      CVector2 cFocalLength = CVector2(CAMERA_PRINCIPAL_POINT_X, CAMERA_PRINCIPAL_POINT_Y);
-      CVector2 cPrincipalPoint = CVector2(CAMERA_FOCAL_LENGTH_X, CAMERA_FOCAL_LENGTH_Y);
+      CVector2 cFocalLength = CVector2(DEFAULT_CAMERA_PRINCIPAL_POINT_X, DEFAULT_CAMERA_PRINCIPAL_POINT_Y);
+      CVector2 cPrincipalPoint = CVector2(DEFAULT_CAMERA_FOCAL_LENGTH_X, DEFAULT_CAMERA_FOCAL_LENGTH_Y);
       CVector3 cDistortionK = CVector3(0,0,0);
       CVector2 cDistortionP = CVector2(0,0);
       CVector3 cCameraPosition = std::get<CVector3>(m_tConfiguration);
@@ -186,6 +187,7 @@ namespace argos {
       else
       {
          LOGERR << "[WARNING] Tag family not specified (using tag36h11 by default)." << std::endl;
+         m_strTagFamilyName = "tag36h11";
          m_ptTagFamily = ::tag36h11_create();
       }
       /* create the tag detector */
@@ -553,31 +555,34 @@ namespace argos {
       /* U,V are pixels in the image.
          U+ to the right <--> x,
          V+ down         <--> y  */
-      Real fFx = m_sCalibration.CameraMatrix(0,0);
-      Real fFy = m_sCalibration.CameraMatrix(1,1);
-      Real fCx = m_sCalibration.CameraMatrix(0,2);
-      Real fCy = m_sCalibration.CameraMatrix(1,2);
-      Real fK1 = m_sCalibration.DistortionK.GetX();
-      Real fK2 = m_sCalibration.DistortionK.GetY();
-      Real fK3 = m_sCalibration.DistortionK.GetZ();
-      Real fP1 = m_sCalibration.DistortionP.GetX();
-      Real fP2 = m_sCalibration.DistortionP.GetY();
 
-      Real fXDistortion = (fU - fCx) / fFx;
-      Real fYDistortion = (fV - fCy) / fFy;
+      /* This function operates on apriltag variables which are doubles rather than Reals */
 
-      Real fXCorrected, fYCorrected;
-      Real fX0 = fXDistortion;
-      Real fY0 = fYDistortion;
+      double fFx = m_sCalibration.CameraMatrix(0,0);
+      double fFy = m_sCalibration.CameraMatrix(1,1);
+      double fCx = m_sCalibration.CameraMatrix(0,2);
+      double fCy = m_sCalibration.CameraMatrix(1,2);
+      double fK1 = m_sCalibration.DistortionK.GetX();
+      double fK2 = m_sCalibration.DistortionK.GetY();
+      double fK3 = m_sCalibration.DistortionK.GetZ();
+      double fP1 = m_sCalibration.DistortionP.GetX();
+      double fP2 = m_sCalibration.DistortionP.GetY();
+
+      double fXDistortion = (fU - fCx) / fFx;
+      double fYDistortion = (fV - fCy) / fFy;
+
+      double fXCorrected, fYCorrected;
+      double fX0 = fXDistortion;
+      double fY0 = fYDistortion;
 
       /* start iteration */
       for (UInt8 unI = 0; unI < UNDISTORT_ITERATIONS; unI++)
       {
-         Real fR2 = fXDistortion * fXDistortion + fYDistortion * fYDistortion;
-         Real fK = 1 / (1. + fK1 * fR2 + fK2 * fR2 * fR2 + fK3 * fR2 * fR2 * fR2);
+         double fR2 = fXDistortion * fXDistortion + fYDistortion * fYDistortion;
+         double fK = 1 / (1. + fK1 * fR2 + fK2 * fR2 * fR2 + fK3 * fR2 * fR2 * fR2);
 
-         Real fDx = 2. * fP1 * fXDistortion * fYDistortion + fP2 * (fR2 + 2. * fXDistortion * fXDistortion);
-         Real fDy = fP1 * (fR2 + 2. * fYDistortion * fYDistortion) + 2. * fP2 * fXDistortion * fYDistortion;
+         double fDx = 2. * fP1 * fXDistortion * fYDistortion + fP2 * (fR2 + 2. * fXDistortion * fXDistortion);
+         double fDy = fP1 * (fR2 + 2. * fYDistortion * fYDistortion) + 2. * fP2 * fXDistortion * fYDistortion;
 
          fXCorrected = (fX0 - fDx) * fK;
          fYCorrected = (fY0 - fDy) * fK;

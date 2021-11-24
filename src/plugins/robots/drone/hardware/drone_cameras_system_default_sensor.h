@@ -76,13 +76,11 @@ namespace argos {
             return m_cMetadata;
          }
 
-         const TConfiguration& GetSensorConfiguration() const {
+         const TConfiguration& GetConfiguration() const {
             return m_tConfiguration;
          };
 
       private:
-         /* camera position and orientation */
-         TConfiguration m_tConfiguration;
          /* calibration data */
          struct SCalibration {
             CVector3 PositionError;
@@ -102,6 +100,8 @@ namespace argos {
          bool m_bCameraExposureAuto = true;
          UInt16 m_unCameraExposureAbsoluteTime = 1250;
          bool m_bExposureTimeSetFlag = false;
+         /* camera position and orientation */
+         TConfiguration m_tConfiguration;
          /* tag detector data */
          std::string m_strTagFamilyName;
          Real m_fTagSideLength;
